@@ -19,10 +19,19 @@
       </div>
 
       <div class="messages" #messagesContainer>
-        <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
+        <!-- <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
           {{ translatedView ? getTranslation(m.text, lang) : m.text }}
+        </div> -->
+        <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
+          <ng-container *ngIf="translatedView; else plainText">
+            {{ getTranslation(m.text, lang) | async }}
+          </ng-container>
+          <ng-template #plainText>{{ m.text }}</ng-template>
         </div>
+
       </div>
+
+
 
       <ion-footer class="footer">
         <ion-toolbar>
@@ -34,7 +43,14 @@
               <ion-select-option value="hindi">HI</ion-select-option>
             </ion-select>
 
-            <ion-button fill="clear" (click)="toggleTranslated()" class="icon-btn" title="View Translated">🌐</ion-button>
+            <ion-button fill="clear" (click)="toggleTranslated()" class="icon-btn"
+              title="View Translated">🌐</ion-button>
+            <ion-button fill="clear" (click)="downloadHindiModel()" [disabled]="modelDownloading" class="icon-btn"
+              title="Download Hindi model">
+              <ng-container *ngIf="!modelDownloading">⬇️</ng-container>
+              <ng-container *ngIf="modelDownloading">⏳</ng-container>
+            </ion-button>
+
             <ion-button (click)="sendMessage()" class="send-btn" color="secondary">Send ➤</ion-button>
           </div>
         </ion-toolbar>

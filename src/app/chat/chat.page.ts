@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
+import { TranslationService } from '../services/translation';
+import { Language } from '@capacitor-mlkit/translation';
 
 @Component({
   selector: 'app-chat',
@@ -15,16 +17,14 @@ import { IonicModule } from '@ionic/angular';
 })
 export class ChatPage implements AfterViewInit {
 
-  // constructor() { }
-
-  // ngOnInit() {
-  // }
-
-  @ViewChild('messagesContainer', { read: ElementRef }) messagesContainer!: ElementRef;
+   @ViewChild('messagesContainer', { read: ElementRef }) messagesContainer!: ElementRef;
 
   lang: 'english' | 'hindi' = 'english';
   translatedView = false;
   inputText = '';
+
+  // small offline translation cache to avoid repeated ML calls for identical strings
+  private runtimeCache = new Map<string, string>();
 
   translations: Record<string, { english: string; hindi: string; }> = {
     "Hello! How are you today?": { english: "Hello! How are you today?", hindi: "नमस्ते! आप आज कैसे हैं?" },
@@ -40,27 +40,57 @@ export class ChatPage implements AfterViewInit {
     { side: 'right', text: "Right? It makes chatting with friends worldwide so easy!" }
   ];
 
+  // show download status in UI
+  modelDownloading = false;
+
+  constructor(private translationService: TranslationService) {}
+
   ngAfterViewInit() {
     this.scrollToBottom();
   }
 
-  getTranslation(text: string, lang: string) {
+  // unified translation getter — synchronous for preloaded entries, asynchronous fallback for unknown text
+  async getTranslation(text: string, lang: string) {
+    // prefer local dictionary first
     const map = this.translations[text];
     if (map) return (map as any)[lang] ?? text;
-    return lang === 'hindi' ? 'डेमो अनुवाद: ' + text : text;
+
+    // if we already cached a dynamic translation, return it
+    const cacheKey = `${text}::${lang}`;
+    if (this.runtimeCache.has(cacheKey)) {
+      return this.runtimeCache.get(cacheKey);
+    }
+
+    // If user selected Hindi, call ML Kit translator (ensure model downloaded)
+    if (lang === 'hindi') {
+      try {
+        // optionally show UI spinner (we set a flag)
+        this.modelDownloading = true;
+        const translated = await this.translationService.translateText(text, Language.English, Language.Hindi);
+        this.runtimeCache.set(cacheKey, translated);
+        return translated;
+      } catch (e) {
+        console.warn('translation failed', e);
+        return 'डेमो अनुवाद: ' + text;
+      } finally {
+        this.modelDownloading = false;
+      }
+    }
+
+    // default fallback
+    return text;
   }
 
   toggleTranslated() {
     this.translatedView = !this.translatedView;
-    // small visual toggle could be done by class or style change
     setTimeout(() => this.scrollToBottom(), 100);
   }
 
-  sendMessage() {
+  async sendMessage() {
     const val = this.inputText?.trim();
     if (!val) return;
     this.thread.push({ side: 'right', text: val });
-    this.translations[val] = { english: val, hindi: 'डेमो अनुवाद: ' + val };
+    this.translations[val] = { english: val, hindi: 'डेमो अनुवाद: ' + val }; // optional
     this.inputText = '';
     setTimeout(() => this.scrollToBottom(), 50);
   }
@@ -71,5 +101,23 @@ export class ChatPage implements AfterViewInit {
       el.scrollTop = el.scrollHeight;
     } catch (e) { /* ignore */ }
   }
+
+  // helper UI method you can call to pre-download Hindi model on a user action
+  async downloadHindiModel() {
+    try {
+      if (await this.translationService.isModelDownloaded(Language.Hindi)) {
+        return;
+      }
+      this.modelDownloading = true;
+      await this.translationService.downloadModel(Language.Hindi);
+    } catch (err) {
+      console.error('Failed to download model', err);
+      // show toast/snackbar to user
+    } finally {
+      this.modelDownloading = false;
+    }
+  }
+
+  
 
 }
