@@ -1,0 +1,7 @@
+{
+  "name": "demmlang",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular"
+}
