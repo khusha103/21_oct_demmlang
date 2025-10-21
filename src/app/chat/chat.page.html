@@ -1,0 +1,44 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>DemmLang Chat Demo</ion-title>
+    <ion-buttons slot="end">
+      <ion-text class="tag">Translated by DemmLang</ion-text>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="bg" [fullscreen]="true">
+  <div class="wrapper">
+    <div class="chat">
+      <div class="chat-top">
+        <div class="avatar">ML</div>
+        <div class="meta">
+          <strong>Maria López</strong>
+          <small>Online</small>
+        </div>
+      </div>
+
+      <div class="messages" #messagesContainer>
+        <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
+          {{ translatedView ? getTranslation(m.text, lang) : m.text }}
+        </div>
+      </div>
+
+      <ion-footer class="footer">
+        <ion-toolbar>
+          <div class="footer-row">
+            <ion-input placeholder="Type a message..." [(ngModel)]="inputText"></ion-input>
+
+            <ion-select interface="popover" [(ngModel)]="lang" class="lang-select">
+              <ion-select-option value="english">EN</ion-select-option>
+              <ion-select-option value="hindi">HI</ion-select-option>
+            </ion-select>
+
+            <ion-button fill="clear" (click)="toggleTranslated()" class="icon-btn" title="View Translated">🌐</ion-button>
+            <ion-button (click)="sendMessage()" class="send-btn" color="secondary">Send ➤</ion-button>
+          </div>
+        </ion-toolbar>
+      </ion-footer>
+    </div>
+  </div>
+</ion-content>
