@@ -1,60 +1,96 @@
 <ion-header>
   <ion-toolbar color="primary">
-    <ion-title>DemmLang Chat Demo</ion-title>
-    <ion-buttons slot="end">
-      <ion-text class="tag">Translated by DemmLang</ion-text>
-    </ion-buttons>
+    <ion-title>Chat</ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="bg" [fullscreen]="true">
-  <div class="wrapper">
-    <div class="chat">
-      <div class="chat-top">
-        <div class="avatar">ML</div>
-        <div class="meta">
-          <strong>Maria López</strong>
-          <small>Online</small>
-        </div>
+<ion-content class="ion-padding" #content>
+  <!-- Empty State -->
+  <div *ngIf="messages.length === 0" class="empty-state">
+    <ion-icon name="chatbubbles-outline"></ion-icon>
+    <p>Start a conversation</p>
+    <small>Type a message below to begin</small>
+  </div>
+
+  <!-- Messages -->
+  <div *ngFor="let message of messages; let i = index" 
+       class="message-wrapper" 
+       [class.user]="message.from === 'user'"
+       [@slideIn]>
+    <div class="message">
+      <p>{{ message.showingEnglish ? message.englishText : message.text }}</p>
+      
+      <div class="message-footer">
+        <span class="timestamp">{{ message.timestamp | date:'short' }}</span>
+        
+        <!-- Toggle button for translated messages -->
+        <ion-button 
+          *ngIf="message.wasTranslated" 
+          fill="clear" 
+          size="small" 
+          class="toggle-lang-btn"
+          (click)="toggleLanguage(i)">
+          <ion-icon 
+            slot="start" 
+            [name]="message.showingEnglish ? 'globe' : 'language'">
+          </ion-icon>
+          <span>{{ message.showingEnglish ? 'Show ' + message.translatedToLanguage : 'View English' }}</span>
+        </ion-button>
       </div>
-
-      <div class="messages" #messagesContainer>
-        <!-- <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
-          {{ translatedView ? getTranslation(m.text, lang) : m.text }}
-        </div> -->
-        <div *ngFor="let m of thread" class="bubble" [ngClass]="m.side">
-          <ng-container *ngIf="translatedView; else plainText">
-            {{ getTranslation(m.text, lang) | async }}
-          </ng-container>
-          <ng-template #plainText>{{ m.text }}</ng-template>
-        </div>
-
-      </div>
-
-
-
-      <ion-footer class="footer">
-        <ion-toolbar>
-          <div class="footer-row">
-            <ion-input placeholder="Type a message..." [(ngModel)]="inputText"></ion-input>
-
-            <ion-select interface="popover" [(ngModel)]="lang" class="lang-select">
-              <ion-select-option value="english">EN</ion-select-option>
-              <ion-select-option value="hindi">HI</ion-select-option>
-            </ion-select>
-
-            <ion-button fill="clear" (click)="toggleTranslated()" class="icon-btn"
-              title="View Translated">🌐</ion-button>
-            <ion-button fill="clear" (click)="downloadHindiModel()" [disabled]="modelDownloading" class="icon-btn"
-              title="Download Hindi model">
-              <ng-container *ngIf="!modelDownloading">⬇️</ng-container>
-              <ng-container *ngIf="modelDownloading">⏳</ng-container>
-            </ion-button>
-
-            <ion-button (click)="sendMessage()" class="send-btn" color="secondary">Send ➤</ion-button>
-          </div>
-        </ion-toolbar>
-      </ion-footer>
+      
+      <ion-badge *ngIf="message.wasTranslated && !message.showingEnglish" class="lang-badge" color="light">
+        {{ message.translatedToLanguage }}
+      </ion-badge>
     </div>
   </div>
 </ion-content>
+
+<ion-footer>
+  <ion-toolbar>
+    <!-- Translation Info Bar -->
+    <div *ngIf="translatedLanguage" class="translation-bar">
+      <ion-icon name="language-outline"></ion-icon>
+      <span>Translated to <b>{{ translatedLanguage }}</b></span>
+      <ion-button fill="clear" size="small" (click)="clearTranslation()">
+        <ion-icon slot="icon-only" name="close-circle"></ion-icon>
+      </ion-button>
+    </div>
+
+    <!-- Compact Input Row -->
+    <div class="input-container">
+      <ion-item lines="none" class="input-item">
+        <ion-input
+          placeholder="Type your message..."
+          [(ngModel)]="typedMessage"
+          (keyup.enter)="sendMessage()"
+          [disabled]="isTranslating"
+        ></ion-input>
+        
+        <!-- Inline buttons inside input -->
+        <div class="inline-buttons" slot="end">
+          <!-- Translate Button -->
+          <ion-button 
+            fill="clear" 
+            size="small"
+            (click)="translateMessage()" 
+            [disabled]="!typedMessage || isTranslating"
+            class="translate-btn">
+            <ion-spinner *ngIf="isTranslating" name="dots"></ion-spinner>
+            <ion-icon *ngIf="!isTranslating" slot="icon-only" name="language"></ion-icon>
+          </ion-button>
+
+          <!-- Send Button -->
+          <ion-button 
+            fill="solid"
+            color="primary" 
+            size="small"
+            (click)="sendMessage()" 
+            [disabled]="!typedMessage || isTranslating"
+            class="send-btn">
+            <ion-icon slot="icon-only" name="send"></ion-icon>
+          </ion-button>
+        </div>
+      </ion-item>
+    </div>
+  </ion-toolbar>
+</ion-footer>
