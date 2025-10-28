@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { IonicModule, IonContent, ToastController } from '@ionic/angular';
+import { IonicModule, IonContent, ToastController, AlertController } from '@ionic/angular';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { trigger, transition, style, animate } from '@angular/animations';
 import { firstValueFrom } from 'rxjs';
@@ -22,6 +22,42 @@ interface Message {
   languages: LangEntry[];
   currentLangIndex: number;
   showingEnglish?: boolean;
+}
+
+// Inline consent service for this example
+class TranslationConsentService {
+  private readonly CONSENT_KEY = 'translation_consent';
+  private readonly CONSENT_VERSION = '1.0';
+
+  hasConsent(): boolean {
+    try {
+      const consent = localStorage.getItem(this.CONSENT_KEY);
+      if (!consent) return false;
+      const data = JSON.parse(consent);
+      return data.granted === true && data.version === this.CONSENT_VERSION;
+    } catch { return false; }
+  }
+
+  grantConsent(): void {
+    const consent = {
+      granted: true,
+      version: this.CONSENT_VERSION,
+      date: new Date().toISOString(),
+      provider: 'Google Translate API'
+    };
+    localStorage.setItem(this.CONSENT_KEY, JSON.stringify(consent));
+  }
+
+  revokeConsent(): void {
+    localStorage.removeItem(this.CONSENT_KEY);
+  }
+
+  getConsentDetails(): any {
+    try {
+      const consent = localStorage.getItem(this.CONSENT_KEY);
+      return consent ? JSON.parse(consent) : null;
+    } catch { return null; }
+  }
 }
 
 @Component({
@@ -69,6 +105,10 @@ export class ChatPage implements OnInit {
   showLanguageSelector: boolean = false;
   quickTranslateMode: boolean = false;
   autoScrollEnabled: boolean = true;
+  showConsentBanner: boolean = false;
+
+  // Consent service instance
+  private consentService = new TranslationConsentService();
 
   readonly translateApiUrl: string =
     'https://script.google.com/macros/s/AKfycbyxnbC6LBpbtdMw2rLVqCRvqbHkT97CPQo9Ta9by1QpCMBH25BE6edivkNj5_dYp1qj/exec';
@@ -90,7 +130,11 @@ export class ChatPage implements OnInit {
     ko: 'Korean',
   };
 
-  constructor(private http: HttpClient, private toastCtrl: ToastController) {}
+  constructor(
+    private http: HttpClient, 
+    private toastCtrl: ToastController,
+    private alertCtrl: AlertController
+  ) {}
 
   ngOnInit() {
     const lang = localStorage.getItem('appLanguage');
@@ -100,6 +144,22 @@ export class ChatPage implements OnInit {
     if (receiverLang) this.receiverLanguage = receiverLang;
     
     this.loadMessages();
+    
+    // Check if we need to show consent banner
+    this.showConsentBanner = !this.consentService.hasConsent();
+
+
+    // Inside ngOnInit()
+try {
+  const pending = sessionStorage.getItem('pendingTypedMessage');
+  if (pending) {
+    this.typedMessage = pending;
+    sessionStorage.removeItem('pendingTypedMessage');
+  }
+} catch (e) {
+  console.warn('Failed to restore pending typed message', e);
+}
+
   }
 
   // API Translation
@@ -134,8 +194,18 @@ export class ChatPage implements OnInit {
   /**
    * SENDER translates their own message to RECEIVER's language before sending
    * This allows sender to preview/edit before sending the translation
+   * REQUIRES USER CONSENT before making API call
    */
   async translateToReceiver() {
+    // Privacy compliance: Check consent before translation
+    if (!this.consentService.hasConsent()) {
+      const granted = await this.showConsentModal();
+      if (!granted) {
+        await this.showToast('Translation requires your consent', 'warning');
+        return;
+      }
+    }
+
     await this.startTranslationFlow(
       this.receiverLanguage, 
       this.appLanguage,  // from sender's language
@@ -146,8 +216,18 @@ export class ChatPage implements OnInit {
   /**
    * RECEIVER translates incoming message to THEIR language (appLanguage)
    * This is for translating messages after they arrive
+   * REQUIRES USER CONSENT before making API call
    */
   async translateToMyLanguage() {
+    // Privacy compliance: Check consent before translation
+    if (!this.consentService.hasConsent()) {
+      const granted = await this.showConsentModal();
+      if (!granted) {
+        await this.showToast('Translation requires your consent', 'warning');
+        return;
+      }
+    }
+
     await this.startTranslationFlow(
       this.appLanguage,
       this.receiverLanguage,  // from receiver's language
@@ -155,12 +235,23 @@ export class ChatPage implements OnInit {
     );
   }
 
+  /**
+   * Core translation flow with proper API parameters
+   * @param targetLangCode - UI label for the target language
+   * @param fromApiOverride - Source language for API (defaults to apiFromLang if not provided)
+   * @param toApiOverride - Target language for API (defaults to apiToLang if not provided)
+   * 
+   * USAGE PATTERNS:
+   * 1. Sender translating to receiver: startTranslationFlow(receiverLang, appLang, receiverLang)
+   * 2. Receiver translating to self: startTranslationFlow(appLang, receiverLang, appLang)
+   */
   private async startTranslationFlow(targetLangCode: string, fromApiOverride?: string, toApiOverride?: string) {
     if (!this.typedMessage.trim()) {
       await this.showToast('Please enter text to translate.', 'warning');
       return;
     }
 
+    // Capture original text on first translate action in this session
     if (!this.originalTypedSnapshot) {
       this.originalTypedSnapshot = this.typedMessage;
       this.originalEnglishMessage = this.originalTypedSnapshot;
@@ -171,8 +262,10 @@ export class ChatPage implements OnInit {
     this.previewTargetLangCode = targetLangCode;
 
     try {
+      // Use overrides if provided, otherwise fall back to configured API languages
       const apiTo = toApiOverride ?? this.apiToLang;
       const apiFrom = fromApiOverride ?? this.apiFromLang;
+      
       const res = await this.translateViaApi(this.typedMessage, apiTo, apiFrom);
 
       const sourceText = res.sourceText || this.originalTypedSnapshot;
@@ -185,6 +278,7 @@ export class ChatPage implements OnInit {
         text: res.translatedText,
       };
 
+      // Append to session translation history
       this.translationsHistory.push(entry);
       this.translatedPreview = entry.text;
       this.translatedLanguage = label;
@@ -192,8 +286,8 @@ export class ChatPage implements OnInit {
       this.originalTypedSnapshot = sourceText;
       this.originalEnglishMessage = sourceText;
 
-      // Success feedback
-      await this.showToast(`Translated to ${label}`, 'success');
+      // Success feedback with clear context
+      await this.showToast(`Translated to ${label} ✓`, 'success');
     } catch (err: any) {
       console.error('Translation error:', err);
       await this.showToast('Translation failed. Please check your connection.', 'danger');
@@ -231,92 +325,259 @@ export class ChatPage implements OnInit {
     this.resetTranslationState();
   }
 
-  sendTranslatedMessage() {
-    if (!this.previewActive || !this.translatedPreview.trim()) {
-      this.showToast('No translated text to send.', 'warning');
-      return;
+  
+// Updated: sendTranslatedMessage — include original, sender translation, receiver translation, and receiver->English back-translation
+async sendTranslatedMessage() {
+  if (!this.previewActive || !this.translatedPreview.trim()) {
+    this.showToast('No translated text to send.', 'warning');
+    return;
+  }
+
+  // Ensure translationsHistory last entry reflects user's edited preview
+  if (this.translationsHistory.length) {
+    const lastIdx = this.translationsHistory.length - 1;
+    this.translationsHistory[lastIdx].text = this.translatedPreview;
+  }
+
+  const languages: LangEntry[] = [];
+  const originalText = this.originalTypedSnapshot || this.typedMessage || '';
+  const senderTranslatedText = this.translatedPreview;
+  const senderCode = this.previewTargetLangCode || (this.translationsHistory.length ? this.translationsHistory[this.translationsHistory.length - 1].code : 'trans');
+  const senderLabel = this.translatedLanguage || this.languageNames[senderCode] || 'Translated';
+
+  // 1) Original
+  languages.push({
+    code: 'orig',
+    label: 'Original',
+    text: originalText
+  });
+
+  // 2) Sender's translated preview (primary)
+  languages.push({
+    code: senderCode,
+    label: senderLabel,
+    text: senderTranslatedText
+  });
+
+  // Attempt to get or generate receiver translation (to receiverLanguage)
+  const receiverCode = this.receiverLanguage;
+  let receiverEntry: LangEntry | undefined = undefined;
+
+  // Look for cached receiver translation in session history
+  receiverEntry = this.translationsHistory.find(h =>
+    (h.code === receiverCode || h.label === this.languageNames[receiverCode])
+  );
+
+  // If not found and receiver language differs, try on-the-fly translation (without showing loader)
+  if (!receiverEntry && receiverCode && receiverCode !== senderCode) {
+    // Check consent
+    if (!this.consentService.hasConsent()) {
+      const granted = await this.showConsentModal();
+      if (!granted) {
+        // Consent denied — still send message with original + sender translation only
+        const msgOnly: Message = {
+          text: senderTranslatedText,
+          englishText: originalText,
+          from: 'user',
+          timestamp: new Date(),
+          wasTranslated: true,
+          translatedToLanguage: senderLabel,
+          languages,
+          currentLangIndex: 1, // sender translation index
+          showingEnglish: false
+        };
+        this.messages.push(msgOnly);
+        this.saveMessages();
+        this.cleanupAfterSend();
+        this.showToast('Translated message sent (receiver translation disabled)', 'success');
+        if (this.autoScrollEnabled) setTimeout(() => this.scrollToBottom(), 100);
+        return;
+      }
     }
 
-    if (this.translationsHistory.length) {
-      const last = this.translationsHistory.length - 1;
-      this.translationsHistory[last].text = this.translatedPreview;
-    }
+    // Perform graceful on-the-fly translation (do not toggle isTranslating)
+    try {
+      const apiFrom = this.appLanguage || this.apiFromLang || 'en';
+      // Prefer translating senderTranslatedText -> receiverCode; fallback to originalText
+      const textToTranslate = senderTranslatedText || originalText;
+      const res = await this.translateViaApi(textToTranslate, receiverCode, apiFrom);
+      const translatedText = res.translatedText ?? '';
 
-    const languages: LangEntry[] = [];
+      receiverEntry = {
+        code: receiverCode,
+        label: this.languageNames[receiverCode] || (receiverCode || 'Receiver').toUpperCase(),
+        text: translatedText
+      };
 
-    if (this.originalTypedSnapshot) {
-      languages.push({
-        code: 'orig',
-        label: 'Original',
-        text: this.originalTypedSnapshot,
-      });
-    } else {
-      languages.push({
-        code: 'orig',
-        label: 'Original',
-        text: this.typedMessage,
-      });
-    }
-
-    for (const h of this.translationsHistory) {
-      languages.push({
-        code: h.code || 'unknown',
-        label: h.label || (h.code || 'Unknown').toUpperCase(),
-        text: h.text,
-      });
-    }
-
-    const message: Message = {
-      text: languages[languages.length - 1].text,
-      englishText: this.originalTypedSnapshot || this.typedMessage || '',
-      from: 'user',
-      timestamp: new Date(),
-      wasTranslated: this.translationsHistory.length > 0,
-      translatedToLanguage: languages.length > 1 ? languages[languages.length - 1].label : undefined,
-      languages,
-      currentLangIndex: languages.length - 1,
-      showingEnglish: false,
-    };
-
-    this.messages.push(message);
-    this.saveMessages();
-    this.cleanupAfterSend();
-    this.showToast('Message sent', 'success');
-
-    if (this.autoScrollEnabled) {
-      setTimeout(() => this.scrollToBottom(), 100);
+      // Cache for session
+      this.translationsHistory.push(receiverEntry);
+    } catch (err) {
+      console.error('Receiver translation failed (silent):', err);
+      receiverEntry = undefined;
+      await this.showToast('Receiver translation failed — sending without it', 'warning');
     }
   }
 
-  sendOriginalMessage() {
-    const original = this.originalTypedSnapshot || this.typedMessage;
-    if (!original || !original.trim()) return;
+  // 3) Attach receiver translation if present
+  if (receiverEntry) {
+    languages.push({
+      code: receiverEntry.code || receiverCode || 'recv',
+      label: receiverEntry.label || this.languageNames[receiverCode] || 'Receiver',
+      text: receiverEntry.text || ''
+    });
 
-    const languages: LangEntry[] = [
-      { code: 'orig', label: 'Original', text: original },
-    ];
+    // 4) Add receiver->English back-translation if receiver language isn't English
+    const needsBackToEnglish = (receiverEntry.code && receiverEntry.code !== 'en' && receiverEntry.text);
+    if (needsBackToEnglish) {
+      // Attempt back-translation to English (do not toggle isTranslating)
+      try {
+        const backRes = await this.translateViaApi(receiverEntry.text, 'en', receiverEntry.code || undefined);
+        const backEnglish = backRes.translatedText ?? '';
 
-    const message: Message = {
-      text: original,
-      englishText: original,
-      from: 'user',
-      timestamp: new Date(),
-      wasTranslated: false,
-      translatedToLanguage: undefined,
-      languages,
-      currentLangIndex: 0,
-      showingEnglish: false,
-    };
-
-    this.messages.push(message);
-    this.saveMessages();
-    this.cleanupAfterSend();
-    this.showToast('Message sent', 'success');
-
-    if (this.autoScrollEnabled) {
-      setTimeout(() => this.scrollToBottom(), 100);
+        if (backEnglish) {
+          // label as Receiver (English)
+          languages.push({
+            code: 'recv_en',
+            label: 'Receiver (English)',
+            text: backEnglish
+          });
+        }
+      } catch (err) {
+        console.error('Back-translation to English failed (silent):', err);
+        // still continue silently — not fatal
+      }
     }
   }
+
+  // Compose message: primary text should be senderTranslatedText
+  const primaryIndex = languages.findIndex(l => l.text === senderTranslatedText);
+  const message: Message = {
+    text: senderTranslatedText,
+    englishText: originalText,
+    from: 'user',
+    timestamp: new Date(),
+    wasTranslated: true,
+    translatedToLanguage: senderLabel,
+    languages,
+    currentLangIndex: primaryIndex >= 0 ? primaryIndex : 1, // point to sender translation if found
+    showingEnglish: false,
+  };
+
+  this.messages.push(message);
+  this.saveMessages();
+  this.cleanupAfterSend();
+  this.showToast('Translated message sent', 'success');
+
+  if (this.autoScrollEnabled) {
+    setTimeout(() => this.scrollToBottom(), 100);
+  }
+}
+
+// Updated: sendOriginalMessage (type-safe; no res.t usage)
+async sendOriginalMessage() {
+  const original = this.originalTypedSnapshot || this.typedMessage;
+  if (!original || !original.trim()) return;
+
+  // Prepare base languages array with the original text
+  const languages: LangEntry[] = [
+    { code: 'orig', label: 'Original', text: original },
+  ];
+
+  const receiverCode = this.receiverLanguage;
+
+  // Try to find a cached receiver translation in this session history
+  let receiverEntry = this.translationsHistory.find(h =>
+    h.code === receiverCode || h.label === this.languageNames[receiverCode]
+  );
+
+  // If no cached receiver translation, attempt an on-the-fly translation (respecting consent)
+  if (!receiverEntry && receiverCode && receiverCode !== this.appLanguage) {
+    // Check consent
+    if (!this.consentService.hasConsent()) {
+      const granted = await this.showConsentModal();
+      if (!granted) {
+        // User declined consent — send original only
+        const messageOnly: Message = {
+          text: original,
+          englishText: original,
+          from: 'user',
+          timestamp: new Date(),
+          wasTranslated: false,
+          translatedToLanguage: undefined,
+          languages,
+          currentLangIndex: 0,
+          showingEnglish: false,
+        };
+        this.messages.push(messageOnly);
+        this.saveMessages();
+        this.cleanupAfterSend();
+        this.showToast('Message sent (translation disabled)', 'medium');
+        if (this.autoScrollEnabled) setTimeout(() => this.scrollToBottom(), 100);
+        return;
+      }
+    }
+
+    // Perform translation call
+    // this.isTranslating = true;
+    try {
+      // Use appLanguage as source (fallback to apiFromLang), and receiverCode as target
+      const apiFrom = this.appLanguage || this.apiFromLang;
+      const res = await this.translateViaApi(original, receiverCode, apiFrom);
+
+      // TYPE-SAFE: use translatedText only (translateViaApi guarantees this field)
+      const translatedText = res.translatedText ?? '';
+      const label = this.languageNames[receiverCode] || (receiverCode || 'Translated').toUpperCase();
+
+      receiverEntry = {
+        code: receiverCode,
+        label,
+        text: translatedText
+      };
+
+      // cache it in session history for later
+      this.translationsHistory.push(receiverEntry);
+    } catch (err) {
+      console.error('Receiver translation failed:', err);
+      // proceed without receiver translation (send original only)
+      receiverEntry = undefined;
+      await this.showToast('Receiver translation failed — sent original', 'warning');
+    } finally {
+      // this.isTranslating = false;
+    }
+  }
+
+  // If we have a receiver translation (either cached or just created), attach it
+  if (receiverEntry) {
+    languages.push({
+      code: receiverEntry.code || receiverCode || 'trans',
+      label: receiverEntry.label || this.languageNames[receiverCode] || 'Translated',
+      text: receiverEntry.text || ''
+    });
+  }
+
+  const message: Message = {
+    text: original,                      // primary shown text remains the original
+    englishText: original,
+    from: 'user',
+    timestamp: new Date(),
+    wasTranslated: !!receiverEntry,      // mark translated if we attached a receiver translation
+    translatedToLanguage: receiverEntry ? (receiverEntry.label || this.languageNames[receiverCode]) : undefined,
+    languages,
+    currentLangIndex: 0,                 // show Original by default
+    showingEnglish: false,
+  };
+
+  this.messages.push(message);
+  this.saveMessages();
+  this.cleanupAfterSend();
+  this.showToast(receiverEntry ? 'Message sent with receiver translation' : 'Message sent', 'success');
+
+  if (this.autoScrollEnabled) {
+    setTimeout(() => this.scrollToBottom(), 100);
+  }
+}
+
+
 
   private cleanupAfterSend() {
     this.typedMessage = '';
@@ -443,7 +704,8 @@ export class ChatPage implements OnInit {
     await toast.present();
   }
 
-  clearAllMessages() {
+
+   clearAllMessages() {
     this.messages = [];
     localStorage.removeItem('chatMessages');
     this.translationsHistory = [];
@@ -452,5 +714,269 @@ export class ChatPage implements OnInit {
     this.translatedPreview = '';
     this.previewActive = false;
     this.showToast('All messages cleared', 'medium');
+  }
+
+  // ===== PRIVACY & COMPLIANCE METHODS =====
+
+  /**
+   * Show privacy consent modal before first translation
+   * Required for GDPR/CCPA compliance
+   */
+  async showConsentModal(): Promise<boolean> {
+    const alert = await this.alertCtrl.create({
+      header: '🌐 Translation Privacy',
+      message: `
+        <div style="text-align: left; font-size: 14px;">
+          <p>To provide translations, we use <strong>Google Translate API</strong>.</p>
+          
+          <p><strong>What happens:</strong></p>
+          <ul style="margin: 8px 0; padding-left: 20px;">
+            <li>Your message is sent to Google securely</li>
+            <li>Google translates and returns the text</li>
+            <li>No personal information is shared</li>
+          </ul>
+          
+          <p><strong>Your rights:</strong></p>
+          <ul style="margin: 8px 0; padding-left: 20px;">
+            <li>You can disable translations anytime</li>
+            <li>Your data is not sold or shared</li>
+            <li>You can delete your data anytime</li>
+          </ul>
+          
+          <p style="font-size: 12px; color: #666; margin-top: 12px;">
+            <a href="https://policies.google.com/privacy" target="_blank" style="color: #3880ff;">Google Privacy Policy</a>
+          </p>
+        </div>
+      `,
+      cssClass: 'consent-alert',
+      backdropDismiss: false,
+      buttons: [
+        {
+          text: 'Not Now',
+          role: 'cancel',
+          cssClass: 'secondary'
+        },
+        {
+          text: 'I Understand',
+          role: 'confirm',
+          cssClass: 'primary',
+          handler: () => {
+            this.consentService.grantConsent();
+            this.showConsentBanner = false;
+            return true;
+          }
+        }
+      ]
+    });
+
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    
+    return role === 'confirm';
+  }
+
+  /**
+   * Grant consent from banner (inline consent option)
+   */
+  // grantConsent() {
+  //   this.consentService.grantConsent();
+  //   this.showConsentBanner = false;
+  //   this.showToast('Translation enabled', 'success');
+  // }
+
+  // ✅ Updated grantConsent() — saves typed message and reloads UI
+grantConsent() {
+  try {
+    // Preserve current typed message (if any) before reload
+    if (this.typedMessage && this.typedMessage.trim()) {
+      sessionStorage.setItem('pendingTypedMessage', this.typedMessage);
+    } else {
+      sessionStorage.removeItem('pendingTypedMessage');
+    }
+  } catch (e) {
+    console.warn('Could not preserve typed message before reload', e);
+  }
+
+  // Grant translation consent and hide banner
+  this.consentService.grantConsent();
+  this.showConsentBanner = false;
+  this.showToast('Translation enabled', 'success');
+
+  // Reload app to refresh UI and show translation input/options immediately
+  setTimeout(() => {
+    location.replace(location.href);
+  }, 400);
+}
+
+
+  /**
+   * Decline consent and hide banner
+   */
+  declineConsent() {
+    this.showConsentBanner = false;
+    this.showToast('You can enable translations later in settings', 'medium');
+  }
+
+  /**
+   * Open privacy policy in new window
+   */
+  openPrivacyPolicy() {
+    window.open('https://policies.google.com/privacy', '_blank');
+  }
+
+  /**
+   * Show detailed privacy information
+   */
+  async showPrivacyInfo() {
+    const consentDetails = this.consentService.getConsentDetails();
+    const consentDate = consentDetails ? new Date(consentDetails.date).toLocaleString() : 'Not granted';
+    
+    const alert = await this.alertCtrl.create({
+      header: 'Translation Privacy',
+      message: `
+        <div style="text-align: left; font-size: 13px;">
+          <p><strong>Current Status:</strong></p>
+          <p>Consent: ${this.consentService.hasConsent() ? '✓ Granted' : '✗ Not granted'}</p>
+          <p>Date: ${consentDate}</p>
+          
+          <hr style="margin: 12px 0;">
+          
+          <p><strong>How It Works:</strong></p>
+          <ul style="margin: 8px 0; padding-left: 20px; font-size: 12px;">
+            <li>Messages sent to Google Translate API via HTTPS</li>
+            <li>Google processes and returns translation</li>
+            <li>We store translations locally on your device</li>
+            <li>No data sent to our servers</li>
+          </ul>
+          
+          <p><strong>Your Data:</strong></p>
+          <ul style="margin: 8px 0; padding-left: 20px; font-size: 12px;">
+            <li>Export your translation history</li>
+            <li>Delete all translations anytime</li>
+            <li>Revoke consent in settings</li>
+          </ul>
+        </div>
+      `,
+      buttons: ['Close']
+    });
+    
+    await alert.present();
+  }
+
+  /**
+   * Revoke translation consent
+   */
+  async revokeConsent() {
+    const alert = await this.alertCtrl.create({
+      header: 'Revoke Consent',
+      message: 'This will disable translation features. You can re-enable them anytime.',
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Revoke',
+          role: 'destructive',
+          handler: () => {
+            this.consentService.revokeConsent();
+            this.showConsentBanner = true;
+            this.showToast('Translation consent revoked', 'medium');
+          }
+        }
+      ]
+    });
+    
+    await alert.present();
+  }
+
+  /**
+   * Clear all translation data (GDPR right to erasure)
+   */
+  async clearTranslationData() {
+    const alert = await this.alertCtrl.create({
+      header: 'Clear Translation Data',
+      message: 'This will remove all translated messages from this device. Original messages will remain. Continue?',
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Clear All',
+          role: 'destructive',
+          handler: () => {
+            // Keep only original language versions
+            this.messages = this.messages.map(msg => ({
+              ...msg,
+              languages: msg.languages.length > 0 ? [msg.languages[0]] : [],
+              currentLangIndex: 0,
+              wasTranslated: false,
+              translatedToLanguage: undefined
+            }));
+            this.saveMessages();
+            this.showToast('Translation data cleared', 'success');
+          }
+        }
+      ]
+    });
+    
+    await alert.present();
+  }
+
+  /**
+   * Export translation data (GDPR right to data portability)
+   */
+  async exportTranslationData() {
+    const consentDetails = this.consentService.getConsentDetails();
+    const translatedMessages = this.messages.filter(m => m.wasTranslated);
+    
+    // Get all unique language codes from messages
+    const allLanguageCodes: string[] = [];
+    this.messages.forEach((msg: Message) => {
+      msg.languages.forEach((lang: LangEntry) => {
+        if (!allLanguageCodes.includes(lang.code)) {
+          allLanguageCodes.push(lang.code);
+        }
+      });
+    });
+    
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      appVersion: '1.0.0',
+      consent: consentDetails,
+      statistics: {
+        totalMessages: this.messages.length,
+        translatedMessages: translatedMessages.length,
+        languages: allLanguageCodes
+      },
+      messages: translatedMessages.map((msg: Message) => ({
+        timestamp: msg.timestamp,
+        languages: msg.languages,
+        wasTranslated: msg.wasTranslated
+      }))
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json'
+    });
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `translation-data-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    this.showToast('Data exported successfully', 'success');
+  }
+
+  /**
+   * Check if translations are enabled (has consent)
+   */
+  get translationsEnabled(): boolean {
+    return this.consentService.hasConsent();
+  }
+
+  /**
+   * Get consent date for display
+   */
+  get consentDate(): Date | null {
+    const details = this.consentService.getConsentDetails();
+    return details ? new Date(details.date) : null;
   }
 }
