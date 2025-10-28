@@ -1,136 +1,10 @@
-ion-content {
-  --background: #f5f5f5;
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--ion-color-medium);
-    text-align: center;
-    padding: 2rem;
-
-    ion-icon {
-      font-size: 80px;
-      margin-bottom: 1rem;
-      opacity: 0.5;
-    }
-
-    p {
-      font-size: 1.2rem;
-      margin: 0.5rem 0;
-      font-weight: 500;
-    }
-
-    small {
-      font-size: 0.9rem;
-      opacity: 0.7;
-    }
-  }
-}
-
-.message-wrapper {
-  display: flex;
+// Chat Container
+.message-container {
   margin-bottom: 16px;
-  animation: slideIn 0.3s ease-out;
-
-  &.user {
-    justify-content: flex-end;
-
-    .message {
-      background: var(--ion-color-primary);
-      color: white;
-      border-radius: 18px 18px 4px 18px;
-
-      .timestamp {
-        color: rgba(255, 255, 255, 0.8);
-      }
-
-      .toggle-lang-btn {
-        --color: rgba(255, 255, 255, 0.9);
-        --background-hover: rgba(255, 255, 255, 0.1);
-      }
-
-      .lang-badge {
-        --background: rgba(255, 255, 255, 0.2);
-        --color: white;
-      }
-    }
-  }
-
-  &:not(.user) {
-    justify-content: flex-start;
-
-    .message {
-      background: white;
-      color: var(--ion-color-dark);
-      border-radius: 18px 18px 18px 4px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-
-      .toggle-lang-btn {
-        --color: var(--ion-color-primary);
-        --background-hover: var(--ion-color-light);
-      }
-    }
-  }
-
-  .message {
-    max-width: 75%;
-    padding: 12px 16px;
-    position: relative;
-    word-wrap: break-word;
-
-    p {
-      margin: 0 0 4px 0;
-      font-size: 15px;
-      line-height: 1.4;
-    }
-
-    .message-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 6px;
-      flex-wrap: wrap;
-    }
-
-    .timestamp {
-      font-size: 11px;
-      opacity: 0.6;
-    }
-
-    .toggle-lang-btn {
-      margin: 0;
-      height: 24px;
-      font-size: 11px;
-      --padding-start: 6px;
-      --padding-end: 6px;
-      font-weight: 500;
-      text-transform: none;
-
-      ion-icon {
-        font-size: 14px;
-        margin-right: 4px;
-      }
-
-      span {
-        font-size: 11px;
-      }
-    }
-
-    .lang-badge {
-      margin-top: 6px;
-      font-size: 10px;
-      padding: 2px 8px;
-      height: auto;
-      display: inline-block;
-    }
-  }
+  animation: slideUp 0.3s ease-out;
 }
 
-@keyframes slideIn {
+@keyframes slideUp {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -141,118 +15,386 @@ ion-content {
   }
 }
 
-ion-footer {
-  ion-toolbar {
-    --background: white;
-    --border-width: 1px 0 0 0;
-    padding: 6px 8px;
+// Chat Bubbles
+.chat-bubble {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+  position: relative;
+
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
   }
 
-  .translation-bar {
+  &.from-user {
+    margin-left: auto;
+    background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-primary-shade) 100%);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+
+  &.from-bot {
+    margin-right: auto;
+    background: var(--ion-color-light);
+    color: var(--ion-color-dark);
+    border-bottom-left-radius: 4px;
+  }
+}
+
+// Message Content
+.message-text {
+  margin-bottom: 8px;
+
+  .message-content {
+    margin: 0 0 8px 0;
+    font-size: 15px;
+    line-height: 1.5;
+    word-wrap: break-word;
+  }
+
+  .message-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: linear-gradient(90deg, var(--ion-color-primary-tint) 0%, var(--ion-color-primary-shade) 100%);
-    border-radius: 6px;
-    margin-bottom: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .lang-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 12px;
+      
+      ion-icon {
+        font-size: 12px;
+      }
+    }
+
+    .timestamp {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+  }
+}
+
+// Message Actions
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+
+  ion-button {
+    --padding-start: 8px;
+    --padding-end: 8px;
+    font-size: 12px;
+    height: 28px;
+    margin: 0;
+  }
+
+  .lang-select {
+    max-width: 100px;
+    font-size: 12px;
+  }
+}
+
+// Empty State
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  text-align: center;
+  color: var(--ion-color-medium);
+
+  ion-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  h3 {
+    margin: 8px 0;
+    font-weight: 600;
+    color: var(--ion-color-dark);
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+// Input Row
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--ion-color-light);
+  border-radius: 24px;
+  margin: 8px;
+
+  .message-input {
+    flex: 1;
+    --background: transparent;
+    --padding-start: 12px;
+    --padding-end: 12px;
+    font-size: 15px;
+    min-height: 40px;
+    max-height: 120px;
+  }
+
+  ion-button {
+    --padding-start: 12px;
+    --padding-end: 12px;
+    height: 40px;
+    width: 40px;
+    margin: 0;
+  }
+}
+
+// Translation Controls
+.translate-controls {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  animation: fadeIn 0.2s ease-in;
+
+  ion-button {
+    --padding-start: 12px;
+    --padding-end: 12px;
     font-size: 13px;
-    color: white;
+    height: 32px;
+    text-transform: none;
+    font-weight: 500;
 
     ion-icon {
       font-size: 18px;
-      color: white;
     }
 
-    span {
-      flex: 1;
-      font-weight: 500;
-      
-      b {
-        font-weight: 600;
+    ion-spinner {
+      width: 16px;
+      height: 16px;
+    }
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+// Preview Container
+.preview-container {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 16px;
+  padding: 16px;
+  margin: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.3s ease-out;
+
+  .preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+
+    .preview-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--ion-color-dark);
+
+      ion-icon {
+        font-size: 20px;
+      }
+
+      strong {
+        color: var(--ion-color-primary);
       }
     }
 
     ion-button {
+      --padding-start: 8px;
+      --padding-end: 8px;
+      height: 28px;
       margin: 0;
-      height: 24px;
-      --color: white;
-      
-      ion-icon {
-        font-size: 20px;
-      }
     }
   }
 
-  .input-container {
+  .original-ref {
     display: flex;
-    flex-direction: column;
-  }
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--ion-color-medium);
 
-  .input-item {
-    --background: #f8f8f8;
-    --border-radius: 28px;
-    --padding-start: 16px;
-    --padding-end: 4px;
-    --inner-padding-end: 0;
-    --min-height: 44px;
-    margin: 0;
-
-    ion-input {
-      --padding-top: 10px;
-      --padding-bottom: 10px;
-      font-size: 15px;
+    ion-icon {
+      font-size: 16px;
+      flex-shrink: 0;
     }
 
-    .inline-buttons {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding-right: 4px;
+    em {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 
-      ion-button {
-        margin: 0;
-        
-        &.translate-btn {
-          --padding-start: 8px;
-          --padding-end: 8px;
-          height: 36px;
-          width: 36px;
-          
-          ion-icon {
-            font-size: 22px;
-          }
+  .preview-textarea {
+    --background: white;
+    --padding-start: 12px;
+    --padding-end: 12px;
+    --padding-top: 12px;
+    --padding-bottom: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
 
-          ion-spinner {
-            width: 20px;
-            height: 20px;
-          }
-        }
+  .preview-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 
-        &.send-btn {
-          --padding-start: 10px;
-          --padding-end: 10px;
-          height: 36px;
-          width: 36px;
-          --border-radius: 18px;
-          
-          ion-icon {
-            font-size: 20px;
-          }
-        }
+    ion-button {
+      --padding-start: 12px;
+      --padding-end: 12px;
+      font-size: 13px;
+      height: 32px;
+      text-transform: none;
+      font-weight: 500;
+
+      ion-icon {
+        font-size: 16px;
       }
     }
   }
 }
 
-// Mobile optimizations
-@media (max-width: 576px) {
-  .message-wrapper .message {
-    max-width: 85%;
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-    .message-footer {
-      flex-direction: column;
-      align-items: flex-start;
+// Language Settings Panel
+ion-toolbar[color="light"] {
+  ion-grid {
+    padding: 8px;
+  }
+
+  ion-item {
+    --background: transparent;
+    --border-color: transparent;
+    --padding-start: 8px;
+    --padding-end: 8px;
+
+    ion-label {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--ion-color-medium);
+    }
+
+    ion-select {
+      font-size: 14px;
+      --padding-start: 8px;
     }
   }
+}
+
+// Responsive Design
+@media (max-width: 576px) {
+  .chat-bubble {
+    max-width: 90%;
+  }
+
+  .preview-actions {
+    ion-button {
+      flex: 1;
+      min-width: 0;
+
+      span {
+        display: none;
+      }
+
+      ion-icon {
+        margin: 0 !important;
+      }
+    }
+  }
+
+  .translate-controls {
+    ion-button {
+      flex: 1;
+      min-width: 100px;
+    }
+  }
+}
+
+// Scrollbar Styling (for webkit browsers)
+ion-content::part(scroll) {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+  }
+}
+
+// Loading State
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: var(--ion-color-primary);
+  font-size: 14px;
+  gap: 8px;
+}
+
+// Toast Customization (global)
+.custom-toast {
+  --background: var(--ion-color-dark);
+  --color: white;
+  --border-radius: 12px;
+  --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
