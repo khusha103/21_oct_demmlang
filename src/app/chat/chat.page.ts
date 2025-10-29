@@ -326,255 +326,215 @@ try {
 
   
 // Updated: sendTranslatedMessage — include original, sender translation, receiver translation, and receiver->English back-translation
+// Replace existing sendTranslatedMessage() with this async version
 async sendTranslatedMessage() {
-  if (!this.previewActive || !this.translatedPreview.trim()) {
-    this.showToast('No translated text to send.', 'warning');
+  if (!this.previewActive || !this.translatedPreview?.trim()) {
+    await this.showToast('No translated text to send.');
     return;
   }
 
-  // Ensure translationsHistory last entry reflects user's edited preview
+  // Save edits into session history (if any)
   if (this.translationsHistory.length) {
-    const lastIdx = this.translationsHistory.length - 1;
-    this.translationsHistory[lastIdx].text = this.translatedPreview;
+    const last = this.translationsHistory.length - 1;
+    this.translationsHistory[last].text = this.translatedPreview;
   }
 
+  // Determine the authoritative "original" text to translate from
+  const originalText = (this.originalTypedSnapshot && this.originalTypedSnapshot.trim())
+    ? this.originalTypedSnapshot
+    : (this.typedMessage && this.typedMessage.trim())
+      ? this.typedMessage
+      : this.translatedPreview; // fallback
+
+  // Build languages array, start with Original
   const languages: LangEntry[] = [];
-  const originalText = this.originalTypedSnapshot || this.typedMessage || '';
-  const senderTranslatedText = this.translatedPreview;
-  const senderCode = this.previewTargetLangCode || (this.translationsHistory.length ? this.translationsHistory[this.translationsHistory.length - 1].code : 'trans');
-  const senderLabel = this.translatedLanguage || this.languageNames[senderCode] || 'Translated';
+  if (originalText) {
+    languages.push({ code: 'orig', label: 'Original', text: originalText });
+  }
 
-  // 1) Original
-  languages.push({
-    code: 'orig',
-    label: 'Original',
-    text: originalText
-  });
+  // Helper to find existing entry by code in session history or languages
+  const findInHist = (code: string) => {
+    // check translationsHistory first (session)
+    const fromHist = this.translationsHistory.find(h => (h.code || '').toLowerCase() === (code || '').toLowerCase());
+    if (fromHist) return fromHist.text;
+    // check previously appended languages (already in languages array)
+    const fromLangs = languages.find(l => (l.code || '').toLowerCase() === (code || '').toLowerCase());
+    return fromLangs ? fromLangs.text : undefined;
+  };
 
-  // 2) Sender's translated preview (primary)
-  languages.push({
-    code: senderCode,
-    label: senderLabel,
-    text: senderTranslatedText
-  });
-
-  // Attempt to get or generate receiver translation (to receiverLanguage)
-  const receiverCode = this.receiverLanguage;
-  let receiverEntry: LangEntry | undefined = undefined;
-
-  // Look for cached receiver translation in session history
-  receiverEntry = this.translationsHistory.find(h =>
-    (h.code === receiverCode || h.label === this.languageNames[receiverCode])
-  );
-
-  // If not found and receiver language differs, try on-the-fly translation (without showing loader)
-  if (!receiverEntry && receiverCode && receiverCode !== senderCode) {
-    // Check consent
-    if (!this.consentService.hasConsent()) {
-      const granted = await this.showConsentModal();
-      if (!granted) {
-        // Consent denied — still send message with original + sender translation only
-        const msgOnly: Message = {
-          text: senderTranslatedText,
-          englishText: originalText,
-          from: 'user',
-          timestamp: new Date(),
-          wasTranslated: true,
-          translatedToLanguage: senderLabel,
-          languages,
-          currentLangIndex: 1, // sender translation index
-          showingEnglish: false
-        };
-        this.messages.push(msgOnly);
-        this.saveMessages();
-        this.cleanupAfterSend();
-        this.showToast('Translated message sent (receiver translation disabled)', 'success');
-        if (this.autoScrollEnabled) setTimeout(() => this.scrollToBottom(), 100);
-        return;
-      }
-    }
-
-    // Perform graceful on-the-fly translation (do not toggle isTranslating)
+  // 1) Ensure English reference exists (code 'en')
+  let englishText = findInHist('en') || this.originalEnglishMessage || undefined;
+  if (!englishText) {
+    // attempt to translate originalText -> English using forced apiFromLang
     try {
-      const apiFrom = this.appLanguage || this.apiFromLang || 'en';
-      // Prefer translating senderTranslatedText -> receiverCode; fallback to originalText
-      const textToTranslate = senderTranslatedText || originalText;
-      const res = await this.translateViaApi(textToTranslate, receiverCode, apiFrom);
-      const translatedText = res.translatedText ?? '';
-
-      receiverEntry = {
-        code: receiverCode,
-        label: this.languageNames[receiverCode] || (receiverCode || 'Receiver').toUpperCase(),
-        text: translatedText
-      };
-
-      // Cache for session
-      this.translationsHistory.push(receiverEntry);
+      const apiFrom = this.apiFromLang;
+      const resEn = await this.translateViaApi(originalText, 'en', apiFrom);
+      englishText = resEn?.translatedText || undefined;
     } catch (err) {
-      console.error('Receiver translation failed (silent):', err);
-      receiverEntry = undefined;
-      await this.showToast('Receiver translation failed — sending without it', 'warning');
+      console.warn('English reference translation failed at send time:', err);
     }
   }
-
-  // 3) Attach receiver translation if present
-  if (receiverEntry) {
-    languages.push({
-      code: receiverEntry.code || receiverCode || 'recv',
-      label: receiverEntry.label || this.languageNames[receiverCode] || 'Receiver',
-      text: receiverEntry.text || ''
-    });
-
-    // 4) Add receiver->English back-translation if receiver language isn't English
-    const needsBackToEnglish = (receiverEntry.code && receiverEntry.code !== 'en' && receiverEntry.text);
-    if (needsBackToEnglish) {
-      // Attempt back-translation to English (do not toggle isTranslating)
-      try {
-        const backRes = await this.translateViaApi(receiverEntry.text, 'en', receiverEntry.code || undefined);
-        const backEnglish = backRes.translatedText ?? '';
-
-        if (backEnglish) {
-          // label as Receiver (English)
-          languages.push({
-            code: 'recv_en',
-            label: 'Receiver (English)',
-            text: backEnglish
-          });
-        }
-      } catch (err) {
-        console.error('Back-translation to English failed (silent):', err);
-        // still continue silently — not fatal
-      }
-    }
+  if (englishText) {
+    // Avoid duplicate if original was already English and labeled as 'orig'
+    // But still provide explicit 'en' entry for reference
+    languages.push({ code: 'en', label: 'English', text: englishText });
   }
 
-  // Compose message: primary text should be senderTranslatedText
-  const primaryIndex = languages.findIndex(l => l.text === senderTranslatedText);
+  // 2) Ensure receiver translation exists (receiverLanguage)
+  const recvCode = this.receiverLanguage || this.apiToLang;
+  let receiverText = findInHist(recvCode) || undefined;
+  if (!receiverText) {
+    try {
+      const apiFrom = this.apiFromLang;
+      // call API to get receiver translation
+      const resRecv = await this.translateViaApi(originalText, recvCode, apiFrom);
+      receiverText = resRecv?.translatedText || undefined;
+    } catch (err) {
+      console.warn('Receiver translation failed at send time:', err);
+    }
+  }
+  if (receiverText) {
+    const recvLabel = this.languageNames[recvCode] || (recvCode || 'Receiver').toUpperCase();
+    languages.push({ code: recvCode, label: recvLabel, text: receiverText });
+  }
+
+  // 3) Add the preview entry (what the user edited & intends to send)
+  // Determine preview language code/label:
+  const previewLangCode = this.previewTargetLangCode
+    || (this.translationsHistory.length ? this.translationsHistory[this.translationsHistory.length - 1].code : undefined)
+    || (this.translatedLanguage ? Object.keys(this.languageNames).find(k => this.languageNames[k] === this.translatedLanguage) : undefined)
+    || 'trans'; // fallback
+
+  const previewLabel = (this.languageNames[previewLangCode] || this.translatedLanguage || (previewLangCode || 'Translated').toUpperCase());
+  // Avoid duplicating existing entry with same code: if same code exists, replace its text with edited preview
+  const existingIndex = languages.findIndex(l => (l.code || '').toLowerCase() === (previewLangCode || '').toLowerCase());
+  if (existingIndex >= 0) {
+    languages[existingIndex].text = this.translatedPreview;
+    languages[existingIndex].label = previewLabel;
+  } else {
+    languages.push({ code: previewLangCode, label: previewLabel, text: this.translatedPreview });
+  }
+
+  // Ensure uniqueness: collapse any duplicates (by code), keeping the last occurrence (most recent)
+  const unique: LangEntry[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < languages.length; i++) {
+    const codeKey = (languages[i].code || '').toLowerCase();
+    // if later entries might be duplicates, we want the last occurring one; so we'll skip until rebuild in reverse
+  }
+  // Build unique by iterating from end -> start so last wins, then reverse
+  for (let i = languages.length - 1; i >= 0; i--) {
+    const key = (languages[i].code || '').toLowerCase();
+    if (!seen.has(key)) {
+      unique.push(languages[i]);
+      seen.add(key);
+    }
+  }
+  unique.reverse(); // restore original order but with duplicates collapsed
+
+  // Decide which index to show by default — show the preview entry (most recent)
+  const previewIndex = unique.findIndex(l => (l.code || '').toLowerCase() === (previewLangCode || '').toLowerCase());
+  const defaultIndex = previewIndex >= 0 ? previewIndex : (unique.length - 1);
+
+  // Build message
   const message: Message = {
-    text: senderTranslatedText,
-    englishText: originalText,
+    text: unique[defaultIndex]?.text || (unique[0]?.text || ''),
+    englishText: englishText || (this.originalEnglishMessage || (originalText || '')),
     from: 'user',
     timestamp: new Date(),
     wasTranslated: true,
-    translatedToLanguage: senderLabel,
-    languages,
-    currentLangIndex: primaryIndex >= 0 ? primaryIndex : 1, // point to sender translation if found
+    translatedToLanguage: unique[defaultIndex]?.label || undefined,
+    languages: unique,
+    currentLangIndex: defaultIndex,
     showingEnglish: false,
   };
 
+  // Push & persist
   this.messages.push(message);
   this.saveMessages();
-  this.cleanupAfterSend();
-  this.showToast('Translated message sent', 'success');
 
-  if (this.autoScrollEnabled) {
-    setTimeout(() => this.scrollToBottom(), 100);
-  }
+  // cleanup
+  this.typedMessage = '';
+  this.translatedPreview = '';
+  this.previewActive = false;
+  this.translationsHistory = [];
+  this.originalTypedSnapshot = '';
+  this.originalEnglishMessage = '';
+  this.resetTranslationState();
+
+  setTimeout(() => this.scrollToBottom(), 100);
 }
 
-// Updated: sendOriginalMessage (type-safe; no res.t usage)
-async sendOriginalMessage() {
-  const original = this.originalTypedSnapshot || this.typedMessage;
-  if (!original || !original.trim()) return;
 
-  // Prepare base languages array with the original text
+// Updated: sendOriginalMessage (type-safe; no res.t usage)
+// Replace existing sendOriginalMessage() with this async version
+async sendOriginalMessage() {
+  // Use the snapshot if available, otherwise the current typed input
+  const original = (this.originalTypedSnapshot && this.originalTypedSnapshot.trim()) ? this.originalTypedSnapshot : (this.typedMessage || '').trim();
+  if (!original) return;
+
+  // Build initial languages array with Original
   const languages: LangEntry[] = [
-    { code: 'orig', label: 'Original', text: original },
+    { code: 'orig', label: 'Original', text: original }
   ];
 
-  const receiverCode = this.receiverLanguage;
+  // Attempt to fetch translation for the receiver language
+  try {
+    // We want to force the API to use apiFromLang (or whatever you set) and the receiverLanguage as 'to'
+    // If your translateViaApi signature differs, adapt these args accordingly.
+    const apiFrom = this.apiFromLang;          // e.g. 'ja'
+    const apiTo = this.receiverLanguage || this.apiToLang; // prefer per-chat receiverLanguage
 
-  // Try to find a cached receiver translation in this session history
-  let receiverEntry = this.translationsHistory.find(h =>
-    h.code === receiverCode || h.label === this.languageNames[receiverCode]
-  );
+    const res = await this.translateViaApi(original, apiTo, apiFrom);
+    const translatedText = res?.translatedText || res?.translatedText || res?.translatedText; // defensive
 
-  // If no cached receiver translation, attempt an on-the-fly translation (respecting consent)
-  if (!receiverEntry && receiverCode && receiverCode !== this.appLanguage) {
-    // Check consent
-    if (!this.consentService.hasConsent()) {
-      const granted = await this.showConsentModal();
-      if (!granted) {
-        // User declined consent — send original only
-        const messageOnly: Message = {
-          text: original,
-          englishText: original,
-          from: 'user',
-          timestamp: new Date(),
-          wasTranslated: false,
-          translatedToLanguage: undefined,
-          languages,
-          currentLangIndex: 0,
-          showingEnglish: false,
-        };
-        this.messages.push(messageOnly);
-        this.saveMessages();
-        this.cleanupAfterSend();
-        this.showToast('Message sent (translation disabled)', 'medium');
-        if (this.autoScrollEnabled) setTimeout(() => this.scrollToBottom(), 100);
-        return;
-      }
-    }
-
-    // Perform translation call
-    // this.isTranslating = true;
-    try {
-      // Use appLanguage as source (fallback to apiFromLang), and receiverCode as target
-      const apiFrom = this.appLanguage || this.apiFromLang;
-      const res = await this.translateViaApi(original, receiverCode, apiFrom);
-
-      // TYPE-SAFE: use translatedText only (translateViaApi guarantees this field)
-      const translatedText = res.translatedText ?? '';
-      const label = this.languageNames[receiverCode] || (receiverCode || 'Translated').toUpperCase();
-
-      receiverEntry = {
-        code: receiverCode,
+    if (translatedText && translatedText.trim()) {
+      const langCode = res.to || apiTo || this.receiverLanguage || 'unknown';
+      const label = this.languageNames[langCode] || (langCode || 'Translated').toUpperCase();
+      languages.push({
+        code: langCode,
         label,
         text: translatedText
-      };
-
-      // cache it in session history for later
-      this.translationsHistory.push(receiverEntry);
-    } catch (err) {
-      console.error('Receiver translation failed:', err);
-      // proceed without receiver translation (send original only)
-      receiverEntry = undefined;
-      await this.showToast('Receiver translation failed — sent original', 'warning');
-    } finally {
-      // this.isTranslating = false;
+      });
+    } else {
+      // If API didn't return translatedText, don't block — continue with only original
+      console.warn('Receiver translation returned empty.');
     }
+  } catch (err) {
+    // If translation fails, still send original (log for debugging / show toast optionally)
+    console.error('Failed to get receiver translation at send time:', err);
+    // optionally: await this.showToast('Could not translate for receiver — sending original only.');
   }
 
-  // If we have a receiver translation (either cached or just created), attach it
-  if (receiverEntry) {
-    languages.push({
-      code: receiverEntry.code || receiverCode || 'trans',
-      label: receiverEntry.label || this.languageNames[receiverCode] || 'Translated',
-      text: receiverEntry.text || ''
-    });
-  }
-
+  // Create message: default shown index will be original (index 0) so sender sees original,
+  // but languages[] contains receiver translation too (index 1) to toggle for review later.
   const message: Message = {
-    text: original,                      // primary shown text remains the original
+    text: languages[0].text,                 // show original by default for sender
     englishText: original,
     from: 'user',
     timestamp: new Date(),
-    wasTranslated: !!receiverEntry,      // mark translated if we attached a receiver translation
-    translatedToLanguage: receiverEntry ? (receiverEntry.label || this.languageNames[receiverCode]) : undefined,
+    wasTranslated: languages.length > 1,    // true if we managed to get a receiver translation
+    translatedToLanguage: languages.length > 1 ? languages[1].label : undefined,
     languages,
-    currentLangIndex: 0,                 // show Original by default
+    currentLangIndex: 0,                    // show original by default
     showingEnglish: false,
   };
 
   this.messages.push(message);
   this.saveMessages();
-  this.cleanupAfterSend();
-  this.showToast(receiverEntry ? 'Message sent with receiver translation' : 'Message sent', 'success');
 
-  if (this.autoScrollEnabled) {
-    setTimeout(() => this.scrollToBottom(), 100);
-  }
+  // cleanup session state
+  this.typedMessage = '';
+  this.translatedPreview = '';
+  this.previewActive = false;
+  this.translationsHistory = [];
+  this.originalTypedSnapshot = '';
+  this.originalEnglishMessage = '';
+  this.resetTranslationState();
+
+  setTimeout(() => this.scrollToBottom(), 100);
 }
+
 
 
 
