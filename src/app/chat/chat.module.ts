@@ -5,6 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 
 import { ChatPageRoutingModule } from './chat-routing.module';
+import { RouterModule } from '@angular/router';
+import { ChatPage } from './chat.page';
 
 // import { ChatPage } from './chat.page';
 
@@ -13,7 +15,8 @@ import { ChatPageRoutingModule } from './chat-routing.module';
     CommonModule,
     FormsModule,
     IonicModule,
-    ChatPageRoutingModule
+    ChatPageRoutingModule,
+    RouterModule.forChild([{ path: '', component: ChatPage }])  
   ],
   declarations: []
 })

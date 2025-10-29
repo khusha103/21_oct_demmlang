@@ -5,6 +5,7 @@ import { IonicModule, IonContent, ToastController, AlertController } from '@ioni
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { trigger, transition, style, animate } from '@angular/animations';
 import { firstValueFrom } from 'rxjs';
+import { Router } from '@angular/router';
 
 interface LangEntry {
   code: string;
@@ -66,19 +67,16 @@ class TranslationConsentService {
   styleUrls: ['./chat.page.scss'],
   standalone: true,
   imports: [CommonModule, FormsModule, IonicModule, HttpClientModule],
-  animations: [
+   animations: [
     trigger('slideIn', [
       transition(':enter', [
-        style({ opacity: 0, transform: 'translateY(10px)' }),
-        animate('300ms ease-out', style({ opacity: 1, transform: 'translateY(0)' })),
+        style({ transform: 'translateY(8px)', opacity: 0 }),
+        animate('180ms ease-out', style({ transform: 'translateY(0)', opacity: 1 }))
       ]),
-    ]),
-    trigger('fadeIn', [
-      transition(':enter', [
-        style({ opacity: 0 }),
-        animate('200ms ease-in', style({ opacity: 1 })),
-      ]),
-    ]),
+      transition(':leave', [
+        animate('120ms ease-in', style({ transform: 'translateY(8px)', opacity: 0 }))
+      ])
+    ])
   ],
 })
 export class ChatPage implements OnInit {
@@ -133,7 +131,8 @@ export class ChatPage implements OnInit {
   constructor(
     private http: HttpClient, 
     private toastCtrl: ToastController,
-    private alertCtrl: AlertController
+    private alertCtrl: AlertController,
+    private router:Router
   ) {}
 
   ngOnInit() {
@@ -979,4 +978,16 @@ grantConsent() {
     const details = this.consentService.getConsentDetails();
     return details ? new Date(details.date) : null;
   }
+
+// Method (simplified for modules)
+async goToReceiverDemo() {
+  await this.showToast('Opening Receiver Demo...', 'medium');
+  try {
+    await this.router.navigate(['/receiver-demo'], { replaceUrl: true });
+    console.log('Navigated to demo');
+  } catch (err) {
+    console.error('Nav error:', err);
+    await this.showToast('Navigation failed—try manual URL.', 'danger');
+  }
+}
 }

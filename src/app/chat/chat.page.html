@@ -11,6 +11,12 @@
     </ion-buttons>
   </ion-toolbar>
 
+<!-- In your footer or toolbar, e.g., inside <div class="trans-btns"> -->
+<ion-button size="small" fill="outline" color="secondary" routerLink="/receiver-demo" routerDirection="forward" title="View Receiver Demo">
+  <ion-icon slot="icon-only" name="eye-outline"></ion-icon>
+  <ion-label>Receiver Demo</ion-label>
+</ion-button>
+
   <!-- Compact Language Settings Panel -->
   <ion-toolbar *ngIf="showLanguageSelector" color="light" [@fadeIn] class="compact-settings">
     <div class="settings-row">

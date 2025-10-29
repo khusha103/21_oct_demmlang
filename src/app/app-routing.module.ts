@@ -18,7 +18,11 @@ const routes: Routes = [
   {
     path: 'chat-translator',
     loadChildren: () => import('./chat-translator/chat-translator.module').then( m => m.ChatTranslatorPageModule)
+  },  {
+    path: 'receiver-demo',
+    loadChildren: () => import('./receiver-demo/receiver-demo.module').then( m => m.ReceiverDemoPageModule)
   },
+
 
   
 

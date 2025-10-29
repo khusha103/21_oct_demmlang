@@ -1,0 +1,164 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>
+      <ion-icon name="language-outline"></ion-icon>
+      Chat Translator - Receiver View Demo
+    </ion-title>
+    <!-- <ion-buttons slot="start">
+      <ion-button routerLink="chat" routerDirection="back">Back to Chat</ion-button>
+    </ion-buttons> -->
+    <ion-button  (click)="goTochat()" title="View Receiver Demo">
+  <!-- <ion-icon slot="icon-only" name="eye-outline"></ion-icon> -->
+  <ion-label>Back to Chat</ion-label>
+</ion-button>
+    <ion-buttons slot="end">
+      <ion-button (click)="showLanguageSelector = !showLanguageSelector" title="Language Settings">
+        <ion-icon slot="icon-only" name="settings-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+
+  <!-- Compact Language Settings Panel -->
+  <ion-toolbar *ngIf="showLanguageSelector" color="light" [@fadeIn] class="compact-settings">
+    <div class="settings-row">
+      <div class="lang-setting">
+        <ion-label>My Language (Receiver)</ion-label>
+        <ion-select [(ngModel)]="appLanguage" interface="popover" placeholder="Select">
+          <ion-select-option *ngFor="let lang of languageNames | keyvalue" [value]="lang.key">
+            {{ lang.value }}
+          </ion-select-option>
+        </ion-select>
+      </div>
+      <div class="lang-setting">
+        <ion-label>Sender</ion-label>
+        <ion-select [(ngModel)]="receiverLanguage" interface="popover" placeholder="Select">
+          <ion-select-option *ngFor="let lang of languageNames | keyvalue" [value]="lang.key">
+            {{ lang.value }}
+          </ion-select-option>
+        </ion-select>
+      </div>
+    </div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content #content class="ion-padding">
+
+  <!-- Demo Header: Explanation -->
+  <ion-card class="demo-info" color="light">
+    <ion-card-header>
+      <ion-card-title>
+        <ion-icon name="information-circle-outline"></ion-icon>
+        Receiver's Perspective Demo
+      </ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <p><strong>Scenario:</strong> Sender ({{ languageNames[receiverLanguage] || 'English' }}) sends messages translated to your language ({{ languageNames[appLanguage] || 'French' }}).</p>
+      <p><strong>What Receiver Sees:</strong> Messages arrive in your language by default. Toggle to view Original, Sender's Translation, or English Back-Translation.</p>
+      <p><strong>Settings:</strong> Receiver's language: {{ languageNames[appLanguage] }} | Sender's language: {{ languageNames[receiverLanguage] }}</p>
+    </ion-card-content>
+  </ion-card>
+
+  <!-- Demo Messages: Simulate Incoming from Sender -->
+  <div *ngFor="let msg of demoMessages; let i = index" [@slideIn] class="msg-wrap">
+    <div class="chat-bubble" [ngClass]="{ 'from-bot': true }">  <!-- Always 'from-bot' for incoming simulation -->
+
+      <!-- Message Text (Current Language) -->
+      <p class="msg-txt">{{ msg.languages[msg.currentLangIndex]?.text }}</p>
+
+      <!-- Compact Meta Row -->
+      <div class="meta-row">
+        <div class="left-meta">
+          <ion-badge *ngIf="msg.languages.length > 1" color="medium" class="lang-tag">
+            {{ msg.languages[msg.currentLangIndex]?.label }}
+          </ion-badge>
+          <span class="time">{{ msg.timestamp | date:'shortTime' }}</span>
+          <ion-badge *ngIf="msg.wasTranslated" color="success" class="trans-tag">Translated</ion-badge>
+        </div>
+
+        <!-- Compact Actions -->
+        <div class="actions">
+          <ion-button *ngIf="msg.languages.length > 1" size="small" fill="clear" (click)="toggleLanguage(i)"
+            title="Switch Language">
+            <ion-icon slot="icon-only" name="swap-horizontal-outline"></ion-icon>
+          </ion-button>
+
+          <ion-button size="small" fill="clear" (click)="copyMessageText(msg)" title="Copy">
+            <ion-icon slot="icon-only" name="copy-outline"></ion-icon>
+          </ion-button>
+
+          <!-- Demo: Explicit Language Toggle Button -->
+          <ion-button *ngIf="msg.languages.length > 1" size="small" fill="clear" color="medium"
+            (click)="toggleLanguage(i)" title="Switch language" class="toggle-lang-btn">
+            <ion-icon slot="start" name="swap-horizontal-outline"></ion-icon>
+            <ion-label>{{ msg.languages[msg.currentLangIndex]?.label }}</ion-label>
+          </ion-button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Additional Demo Messages for Variety -->
+  <div *ngFor="let msg of additionalDemoMessages; let i = index" [@slideIn] class="msg-wrap">
+    <div class="chat-bubble" [ngClass]="{ 'from-bot': true }">  <!-- Always 'from-bot' for incoming -->
+
+      <!-- Message Text (Current Language) -->
+      <p class="msg-txt">{{ msg.languages[msg.currentLangIndex]?.text }}</p>
+
+      <!-- Compact Meta Row -->
+      <div class="meta-row">
+        <div class="left-meta">
+          <ion-badge *ngIf="msg.languages.length > 1" color="medium" class="lang-tag">
+            {{ msg.languages[msg.currentLangIndex]?.label }}
+          </ion-badge>
+          <span class="time">{{ msg.timestamp | date:'shortTime' }}</span>
+          <ion-badge *ngIf="msg.wasTranslated" color="success" class="trans-tag">Translated</ion-badge>
+        </div>
+
+        <!-- Compact Actions -->
+        <div class="actions">
+          <ion-button *ngIf="msg.languages.length > 1" size="small" fill="clear" (click)="toggleLanguage(i + demoMessages.length)"
+            title="Switch Language">
+            <ion-icon slot="icon-only" name="swap-horizontal-outline"></ion-icon>
+          </ion-button>
+
+          <ion-button size="small" fill="clear" (click)="copyMessageText(msg)" title="Copy">
+            <ion-icon slot="icon-only" name="copy-outline"></ion-icon>
+          </ion-button>
+
+          <!-- Demo: Explicit Language Toggle Button -->
+          <ion-button *ngIf="msg.languages.length > 1" size="small" fill="clear" color="medium"
+            (click)="toggleLanguage(i + demoMessages.length)" title="Switch language" class="toggle-lang-btn">
+            <ion-icon slot="start" name="swap-horizontal-outline"></ion-icon>
+            <ion-label>{{ msg.languages[msg.currentLangIndex]?.label }}</ion-label>
+          </ion-button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State (Show if no messages) -->
+  <div *ngIf="demoMessages.length === 0 && additionalDemoMessages.length === 0" class="empty-state">
+    <ion-icon name="chatbubbles-outline" color="medium"></ion-icon>
+    <p>No messages yet. Use the "New Message" button to simulate incoming!</p>
+  </div>
+
+</ion-content>
+
+<!-- Demo Footer: Controls Only (No Input or Preview) -->
+<ion-footer>
+  <ion-toolbar class="compact-footer">
+    <div class="demo-controls">
+      <ion-button size="small" fill="outline" (click)="simulateNewMessage()" expand="block">
+        <ion-icon name="add-outline" slot="start"></ion-icon>
+        <span>Simulate New Incoming Message</span>
+      </ion-button>
+      <ion-button size="small" fill="clear" (click)="clearAllMessages()" title="Clear Demo">
+        <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+      <ion-button size="small" fill="solid" color="primary" (click)="showPrivacyInfo()" expand="block">
+        <ion-icon name="shield-checkmark-outline" slot="start"></ion-icon>
+        <span>Privacy Info</span>
+      </ion-button>
+    </div>
+  </ion-toolbar>
+</ion-footer>
